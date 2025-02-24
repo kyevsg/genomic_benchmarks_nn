@@ -20,7 +20,8 @@ class PromoterClassifier(nn.Module):
             num_classes: Number of output classes (1 for binary classification)
         """
         super(PromoterClassifier, self).__init__()
-        self.linear1 = nn.Linear(sequence_length, hidden_neurons)
+        input_size = sequence_length * 4
+        self.linear1 = nn.Linear(input_size, hidden_neurons)
         self.activation = nn.ReLU()
         self.linear2 = nn.Linear(hidden_neurons, num_classes)
         self.output_activation = nn.Sigmoid()
@@ -35,8 +36,27 @@ class PromoterClassifier(nn.Module):
         Returns:
             Predicted probabilities
         """
-        try:
-            batch = sequences.view(sequences.size(0), -1)
+        try:   # converting string sequences to one-hot encoding if needed
+            if isinstance(sequences[0], str):
+                nuc_to_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
+                batch_size = len(sequences)
+                seq_length = len(sequences[0])
+                encoded = torch.zeros((batch_size, seq_length, 4))
+                
+                for i, seq in enumerate(sequences):
+                    for j, nuc in enumerate(seq):
+                        encoded[i, j, nuc_to_idx[nuc]] = 1
+                
+                # reshaping tensor and flattening the one-hot encoded sequences
+                batch = encoded.view(batch_size, seq_length * 4)
+                
+                # debugging (get rid of later)
+                logger.debug(f"Encoded shape: {encoded.shape}")
+                logger.debug(f"Batch shape after reshape: {batch.shape}")
+                logger.debug(f"Linear1 weight shape: {self.linear1.weight.shape}")
+            else:
+                batch = sequences.view(sequences.size(0), -1)
+            
             hidden = self.activation(self.linear1(batch))
             output = self.output_activation(self.linear2(hidden))
             return output
@@ -69,6 +89,7 @@ def train_model(model: PromoterClassifier,
             total_loss = 0.0
             for sequences, labels in dataset_train:
                 optimizer.zero_grad()
+                labels = float(labels)
                 predictions = model(sequences)
                 loss = criterion(predictions, labels)
                 loss.backward()
@@ -126,12 +147,17 @@ def main():
         num_epochs = 10
         
         # loading dataset
-        dataset_train = HumanNontataPromoters(split='train', version=0)
-        dataset_test = HumanNontataPromoters(split='test', version=0)
-        sequence_length = dataset_test[0][0].shape[0]
+        dataset_train = HumanNontataPromoters(split='train')
+        dataset_test = HumanNontataPromoters(split='test')
+
+        sequence_length = len(dataset_test[0][0])
         
         # initializing model
         model = PromoterClassifier(sequence_length, hidden_neurons, num_classes)
+
+        # debugging (get rid of later)
+        logger.info(f"Sequence length: {sequence_length}")
+        logger.info(f"Input size to first linear layer: {sequence_length * 4}")
         
         # training and evaluating
         trained_model, accuracy = train_model(model, dataset_train, learning_rate, num_epochs)

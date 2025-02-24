@@ -8,8 +8,10 @@ from promoters import PromoterClassifier, train_model, evaluate_model
 
 
 @pytest.fixture
-def model():
-    return PromoterClassifier(sequence_length=100, hidden_neurons=64, num_classes=1)
+def model():  # mock dataset
+    sequences = torch.randn(10, 100)
+    labels = torch.randint(0, 2, (10, 1)).float()
+    return [(seq, label) for seq, label in zip(sequences, labels)]
 
 @pytest.fixture
 def test_dataset():
@@ -21,7 +23,7 @@ def test_model_initialization(model):
     assert hasattr(model, 'linear2')
 
 def test_forward_pass(model):
-    input_sequence = 'CAATCTCACAGGCTCCTGGTTGTCTACCCATGGACCCAGAGGTTCTTTGACAGCTTTGGCAACCTGTCCTCTGCCTCTGCCATCATGGGCAACCCCAAAGTCAAGGCACATGGCAAGAAGGTGCTGACTTCCTTGGGAGATGCCATAAAGCACCTGGATGATCTCAAGGGCACCTTTGCCCAGCTGAGTGAACTGCACTGTGACAAGCTGCATGTGGATCCTGAGAACTTCAAGGTGAGTCCAGGAGATGT'
+    input_sequence = torch.randn(1, 100)
     output = model(input_sequence)
     assert output.shape == (1, 1)
     assert torch.all((output >= 0) & (output <= 1))
