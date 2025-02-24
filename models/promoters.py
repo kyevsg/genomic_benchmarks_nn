@@ -21,12 +21,12 @@ class PromoterClassifier(nn.Module):
         """
         super(PromoterClassifier, self).__init__()
         input_size = sequence_length * 4
-        self.linear1 = nn.Linear(input_size, hidden_neurons)
+        self.linear1 = nn.Linear(in_features=input_size, out_features=hidden_neurons)
         self.activation = nn.ReLU()
-        self.linear2 = nn.Linear(hidden_neurons, num_classes)
+        self.linear2 = nn.Linear(in_features=hidden_neurons, out_features=num_classes)
         self.output_activation = nn.Sigmoid()
     
-    def forward(self, sequences: torch.Tensor) -> torch.Tensor:
+    def forward(self, sequences):
         """
         This function is the forward pass of the neural network.
         
@@ -36,8 +36,10 @@ class PromoterClassifier(nn.Module):
         Returns:
             Predicted probabilities
         """
-        try:   # converting string sequences to one-hot encoding if needed
-            if isinstance(sequences[0], str):
+        try:
+            if isinstance(sequences, torch.Tensor):  # input is already a tensor
+                batch = sequences.view(sequences.size(0), -1)
+            else:  # input is a list of strings
                 nuc_to_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
                 batch_size = len(sequences)
                 seq_length = len(sequences[0])
@@ -45,29 +47,19 @@ class PromoterClassifier(nn.Module):
                 
                 for i, seq in enumerate(sequences):
                     for j, nuc in enumerate(seq):
-                        encoded[i, j, nuc_to_idx[nuc]] = 1
+                        if nuc in nuc_to_idx:
+                            encoded[i, j, nuc_to_idx[nuc]] = 1
                 
-                # reshaping tensor and flattening the one-hot encoded sequences
-                batch = encoded.view(batch_size, seq_length * 4)
-                
-                # debugging (get rid of later)
-                logger.debug(f"Encoded shape: {encoded.shape}")
-                logger.debug(f"Batch shape after reshape: {batch.shape}")
-                logger.debug(f"Linear1 weight shape: {self.linear1.weight.shape}")
-            else:
-                batch = sequences.view(sequences.size(0), -1)
-            
+                batch = encoded.view(batch_size, -1)
+
             hidden = self.activation(self.linear1(batch))
             output = self.output_activation(self.linear2(hidden))
             return output
-        except RuntimeError as e:
-            logger.error(f"Forward pass failed: {str(e)}")
+        except Exception as e:
+            print(f"Error in forward pass: {str(e)}")
             raise
 
-def train_model(model: PromoterClassifier, 
-                dataset_train: torch.utils.data.Dataset,
-                learning_rate: float,
-                num_epochs: int) -> Tuple[PromoterClassifier, float]:
+def train_model(model, dataset_train, learning_rate=0.001, num_epochs=2):
     """
     This function trains the promoter classifier model.
     
@@ -83,23 +75,17 @@ def train_model(model: PromoterClassifier,
     try:
         criterion = nn.BCELoss()
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+        train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=32, shuffle=True)
         
-        # training loop
         for epoch in range(num_epochs):
-            total_loss = 0.0
-            for sequences, labels in dataset_train:
+            for sequences, labels in train_loader:
                 optimizer.zero_grad()
-                labels = float(labels)
-                predictions = model(sequences)
-                loss = criterion(predictions, labels)
+                labels = labels.float().view(-1, 1)
+                outputs = model(sequences)
+                loss = criterion(outputs, labels)
                 loss.backward()
                 optimizer.step()
-                total_loss += loss.item()
-            
-            avg_loss = total_loss / len(dataset_train)
-            logger.info(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}")
         
-        # evaluating the model
         accuracy = evaluate_model(model, dataset_train)
         return model, accuracy
     
@@ -148,16 +134,22 @@ def main():
         
         # loading dataset
         dataset_train = HumanNontataPromoters(split='train')
-        dataset_test = HumanNontataPromoters(split='test')
 
-        sequence_length = len(dataset_test[0][0])
+        # sample data for shape verification (debug)
+        sample_seq, sample_label = dataset_train[0]
+        sequence_length = len(sample_seq)
+        
+        logger.info(f"Sample sequence shape: {len(sample_seq)}")
+        logger.info(f"Sample sequence: {sample_seq[:10]}...")
         
         # initializing model
         model = PromoterClassifier(sequence_length, hidden_neurons, num_classes)
-
-        # debugging (get rid of later)
-        logger.info(f"Sequence length: {sequence_length}")
-        logger.info(f"Input size to first linear layer: {sequence_length * 4}")
+        
+        # model architecture (debug)
+        logger.info(f"Model architecture:")
+        logger.info(f"Input size: {sequence_length * 4}")
+        logger.info(f"Hidden neurons: {hidden_neurons}")
+        logger.info(f"Output classes: {num_classes}")
         
         # training and evaluating
         trained_model, accuracy = train_model(model, dataset_train, learning_rate, num_epochs)
