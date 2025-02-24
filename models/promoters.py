@@ -1,8 +1,9 @@
-from genomic_benchmarks.dataset_getters.pytorch_datasets import human_nontata_promoters
+from genomic_benchmarks.dataset_getters.pytorch_datasets import HumanNontataPromoters
 import torch
 import torch.nn as nn
 from typing import Tuple
 import logging
+
 
 # configuring logging
 logging.basicConfig(level=logging.INFO)
@@ -44,7 +45,7 @@ class PromoterClassifier(nn.Module):
             raise
 
 def train_model(model: PromoterClassifier, 
-                dataset: ,  # need to add promoter training dataset
+                dataset_train: torch.utils.data.Dataset,
                 learning_rate: float,
                 num_epochs: int) -> Tuple[PromoterClassifier, float]:
     """
@@ -66,7 +67,7 @@ def train_model(model: PromoterClassifier,
         # training loop
         for epoch in range(num_epochs):
             total_loss = 0.0
-            for sequences, labels in dataset:
+            for sequences, labels in dataset_train:
                 optimizer.zero_grad()
                 predictions = model(sequences)
                 loss = criterion(predictions, labels)
@@ -74,11 +75,11 @@ def train_model(model: PromoterClassifier,
                 optimizer.step()
                 total_loss += loss.item()
             
-            avg_loss = total_loss / len(dataset)
+            avg_loss = total_loss / len(dataset_train)
             logger.info(f"Epoch {epoch+1}/{num_epochs}, Average Loss: {avg_loss:.4f}")
         
         # evaluating the model
-        accuracy = evaluate_model(model, dataset)
+        accuracy = evaluate_model(model, dataset_train)
         return model, accuracy
     
     except Exception as e:
@@ -86,7 +87,7 @@ def train_model(model: PromoterClassifier,
         raise
 
 def evaluate_model(model: PromoterClassifier, 
-                  dataset: ) -> float:  # need to add test dataset
+                  dataset_test: torch.utils.data.Dataset) -> float:
     """
     This function evaluates the model's accuracy.
     
@@ -102,7 +103,7 @@ def evaluate_model(model: PromoterClassifier,
         total_samples = 0
         
         with torch.no_grad():
-            for sequences, labels in dataset:
+            for sequences, labels in dataset_test:
                 predictions = model(sequences)
                 predicted_labels = torch.round(predictions)
                 total_samples += labels.size(0)
@@ -125,14 +126,15 @@ def main():
         num_epochs = 10
         
         # loading dataset
-        dataset = human_nontata_promoters()
-        sequence_length = dataset[0][0].shape[0]
+        dataset_train = HumanNontataPromoters(split='train', version=0)
+        dataset_test = HumanNontataPromoters(split='test', version=0)
+        sequence_length = dataset_test[0][0].shape[0]
         
         # initializing model
         model = PromoterClassifier(sequence_length, hidden_neurons, num_classes)
         
         # training and evaluating
-        trained_model, accuracy = train_model(model, dataset, learning_rate, num_epochs)
+        trained_model, accuracy = train_model(model, dataset_train, learning_rate, num_epochs)
         
     except Exception as e:
         logger.error(f"Program failed: {str(e)}")

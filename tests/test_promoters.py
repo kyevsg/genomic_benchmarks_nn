@@ -1,7 +1,11 @@
 import pytest
 import torch
-from models.promoters import PromoterClassifier, train_model, evaluate_model
-from genomic_benchmarks.dataset_getters.pytorch_datasets import human_nontata_promoters
+from genomic_benchmarks.dataset_getters.pytorch_datasets import HumanNontataPromoters
+
+import sys
+sys.path.append("models")
+from promoters import PromoterClassifier, train_model, evaluate_model
+
 
 @pytest.fixture
 def model():
@@ -9,7 +13,7 @@ def model():
 
 @pytest.fixture
 def test_dataset():
-    # need to add testing dataset here (subset?) and for testing forward pass
+    return HumanNontataPromoters(split='test', version=0)
 
 def test_model_initialization(model):
     assert isinstance(model, PromoterClassifier)
@@ -17,7 +21,7 @@ def test_model_initialization(model):
     assert hasattr(model, 'linear2')
 
 def test_forward_pass(model):
-    input_sequence = 
+    input_sequence = 'CAATCTCACAGGCTCCTGGTTGTCTACCCATGGACCCAGAGGTTCTTTGACAGCTTTGGCAACCTGTCCTCTGCCTCTGCCATCATGGGCAACCCCAAAGTCAAGGCACATGGCAAGAAGGTGCTGACTTCCTTGGGAGATGCCATAAAGCACCTGGATGATCTCAAGGGCACCTTTGCCCAGCTGAGTGAACTGCACTGTGACAAGCTGCATGTGGATCCTGAGAACTTCAAGGTGAGTCCAGGAGATGT'
     output = model(input_sequence)
     assert output.shape == (1, 1)
     assert torch.all((output >= 0) & (output <= 1))
