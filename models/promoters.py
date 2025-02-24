@@ -86,7 +86,7 @@ def train_model(model: PromoterClassifier,
         raise
 
 def evaluate_model(model: PromoterClassifier, 
-                  dataset: torch.utils.data.Dataset) -> float:
+                  dataset: ) -> float:  # need to add test dataset
     """
     This function evaluates the model's accuracy.
     

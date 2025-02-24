@@ -9,7 +9,7 @@ def model():
 
 @pytest.fixture
 def test_dataset():
-    # need to add testing dataset here and for testing forward pass
+    # need to add testing dataset here (subset?) and for testing forward pass
 
 def test_model_initialization(model):
     assert isinstance(model, PromoterClassifier)
