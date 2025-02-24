@@ -37,20 +37,27 @@ class PromoterClassifier(nn.Module):
             Predicted probabilities
         """
         try:
-            if isinstance(sequences, torch.Tensor):  # input is already a tensor
-                batch = sequences.view(sequences.size(0), -1)
-            else:  # input is a list of strings
+            if isinstance(sequences, torch.Tensor):  # tensor input from DataLoader
+                if len(sequences.shape) == 3:  # shape is [batch_size, seq_length, 4]
+                    batch_size = sequences.shape[0]
+                    batch = sequences.reshape(batch_size, -1)
+                else:  # shape is [batch_size, seq_length]
+                    batch_size = sequences.shape[0]
+                    seq_length = sequences.shape[1]
+                    batch = torch.zeros((batch_size, seq_length * 4))
+                    for i in range(batch_size):
+                        for j, val in enumerate(sequences[i]):
+                            batch[i, j * 4 + val] = 1
+            else:  # string input
                 nuc_to_idx = {'A': 0, 'C': 1, 'G': 2, 'T': 3}
                 batch_size = len(sequences)
                 seq_length = len(sequences[0])
-                encoded = torch.zeros((batch_size, seq_length, 4))
+                batch = torch.zeros((batch_size, seq_length * 4))
                 
                 for i, seq in enumerate(sequences):
                     for j, nuc in enumerate(seq):
                         if nuc in nuc_to_idx:
-                            encoded[i, j, nuc_to_idx[nuc]] = 1
-                
-                batch = encoded.view(batch_size, -1)
+                            batch[i, j * 4 + nuc_to_idx[nuc]] = 1
 
             hidden = self.activation(self.linear1(batch))
             output = self.output_activation(self.linear2(hidden))
@@ -77,6 +84,7 @@ def train_model(model, dataset_train, learning_rate=0.001, num_epochs=2):
         optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
         train_loader = torch.utils.data.DataLoader(dataset_train, batch_size=32, shuffle=True)
         
+        model.train()
         for epoch in range(num_epochs):
             for sequences, labels in train_loader:
                 optimizer.zero_grad()
@@ -106,19 +114,19 @@ def evaluate_model(model: PromoterClassifier,
         Classification accuracy
     """
     try:
-        correct_predictions = 0
-        total_samples = 0
+        model.eval()
+        test_loader = torch.utils.data.DataLoader(dataset_test, batch_size=32, shuffle=False)
+        correct = 0
+        total = 0
         
         with torch.no_grad():
-            for sequences, labels in dataset_test:
-                predictions = model(sequences)
-                predicted_labels = torch.round(predictions)
-                total_samples += labels.size(0)
-                correct_predictions += (predicted_labels == labels).sum().item()
+            for sequences, labels in test_loader:
+                outputs = model(sequences)
+                predicted = (outputs >= 0.5).float()
+                total += labels.size(0)
+                correct += (predicted.view(-1) == labels).sum().item()
         
-        accuracy = correct_predictions / total_samples
-        logger.info(f"Model Accuracy: {accuracy:.4f}")
-        return accuracy
+        return correct / total
     
     except Exception as e:
         logger.error(f"Evaluation failed: {str(e)}")
